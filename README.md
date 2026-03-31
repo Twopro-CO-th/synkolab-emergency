@@ -38,13 +38,60 @@ npm run dev    # development (auto-reload)
 npm start      # production
 ```
 
-## Production (SSL)
+## Production (SSL — Docker)
+
+Domain: `call.stu-link.com` (Sectigo Wildcard `*.stu-link.com`)
+
+### 1. วาง SSL Certificate
+
+วางไฟล์ 2 ตัวใน `certs/`:
+
+```
+certs/
+  fullchain.pem    ← server cert + intermediate chain
+  privkey.pem      ← private key
+```
+
+### 2. สร้าง .env
 
 ```bash
-# Let's Encrypt
-docker compose -f docker-compose.prod.yml --profile certbot run --rm certbot
+# สร้างอัตโนมัติพร้อม generate secrets ทั้งหมด
+bash scripts/generate-env.sh
+```
 
-# Start
+Script จะสร้าง JWT_SECRET, API_KEYS, DEVICE_SECRET, TURN_SECRET และอัพเดท `turnserver.conf` ให้ตรงกัน
+
+> **สำคัญ:** เก็บค่า `API_KEYS` ที่ได้ไปใส่ใน community-link server ด้วย
+
+### 3. Start Services
+
+```bash
+docker compose -f docker-compose.prod.yml up -d
+```
+
+### Services ที่รัน
+
+| Service | Port | รายละเอียด |
+|---------|------|------------|
+| **emergency-api** | 4000 (internal) | Node.js app (SSL enabled) |
+| **emergency-nginx** | 80, 443 | Reverse proxy + SSL |
+| **emergency-coturn** | 3478, 5349 (TLS) | TURN/TURNS server |
+
+### Firewall ports ที่ต้องเปิด
+
+```
+80/tcp       — HTTP (redirect → HTTPS)
+443/tcp      — HTTPS
+3478/tcp+udp — TURN
+5349/tcp     — TURNS (TLS)
+```
+
+### Let's Encrypt (ทางเลือก)
+
+ถ้าไม่มี cert ของตัวเอง สามารถใช้ Let's Encrypt:
+
+```bash
+docker compose -f docker-compose.prod.yml --profile certbot run --rm certbot
 docker compose -f docker-compose.prod.yml up -d
 ```
 
