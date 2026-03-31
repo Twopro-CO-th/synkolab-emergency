@@ -32,8 +32,8 @@ NODE_ENV=production
 HOST=0.0.0.0
 PORT=4000
 
-# ---------- SSL (direct mode, ไม่ผ่าน nginx) ----------
-SSL_ENABLED=false
+# ---------- SSL ----------
+SSL_ENABLED=true
 SSL_CERT_PATH=/app/certs/fullchain.pem
 SSL_KEY_PATH=/app/certs/privkey.pem
 
