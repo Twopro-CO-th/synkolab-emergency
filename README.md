@@ -143,17 +143,27 @@ docker compose -f docker-compose.prod.yml up -d
 
 #### อัพเดท .env แล้ว restart
 
-เมื่อแก้ไข `.env` ให้ restart เฉพาะ app:
+เมื่อแก้ไข `.env` ให้ลบ containers ทั้งหมดแล้วสร้างใหม่:
 
 ```bash
-docker compose -f docker-compose.prod.yml up -d --force-recreate app
+# 1. หยุดและลบ containers + networks + volumes ทั้งหมด
+docker compose -f docker-compose.prod.yml down --remove-orphans --volumes
+
+# 2. ลบ images เก่า (ถ้าต้องการ build ใหม่ทั้งหมด)
+docker compose -f docker-compose.prod.yml down --rmi all --remove-orphans --volumes
+
+# 3. สร้างใหม่ทั้งหมด
+docker compose -f docker-compose.prod.yml up -d --build
 ```
 
-หรือ restart ทั้งหมด:
+> `--remove-orphans` จะลบ container เก่าที่ไม่ได้อยู่ใน compose file แล้ว
+> `--volumes` จะลบ volumes ด้วย (ระวัง: ข้อมูล DB จะหายถ้าใช้ flag นี้)
+
+ถ้าต้องการเก็บข้อมูล DB ไว้ ใช้แบบไม่มี `--volumes`:
 
 ```bash
-docker compose -f docker-compose.prod.yml down
-docker compose -f docker-compose.prod.yml up -d
+docker compose -f docker-compose.prod.yml down --remove-orphans
+docker compose -f docker-compose.prod.yml up -d --build
 ```
 
 #### อัพเดท Nginx config แล้ว reload
