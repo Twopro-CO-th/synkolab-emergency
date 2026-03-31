@@ -61,8 +61,8 @@ TURN_TTL=86400
 # ---------- Database ----------
 DB_PATH=./data/emergency.db
 
-# ---------- Redis (optional, สำหรับ multi-instance) ----------
-REDIS_ENABLED=false
+# ---------- Redis ----------
+REDIS_ENABLED=true
 REDIS_URL=redis://redis:6379
 
 # ---------- Rate Limiting ----------
@@ -80,9 +80,9 @@ CALL_RING_TIMEOUT=30000
 CALL_MAX_DURATION=3600000
 
 # ---------- LiveKit (SFU สำหรับ group/broadcast calls) ----------
-LIVEKIT_ENABLED=false
+LIVEKIT_ENABLED=true
 LIVEKIT_URL=ws://livekit:7880
-LIVEKIT_PUBLIC_URL=wss://call.stu-link.com:7880
+LIVEKIT_PUBLIC_URL=wss://call.stu-link.com
 LIVEKIT_API_KEY=${LIVEKIT_API_KEY}
 LIVEKIT_API_SECRET=${LIVEKIT_API_SECRET}
 LIVEKIT_TOKEN_TTL=3600
@@ -109,6 +109,13 @@ echo ""
 echo "อัพเดท turnserver.conf:"
 sed -i "s/^static-auth-secret=.*/static-auth-secret=${TURN_SECRET}/" config/turnserver.conf
 echo "  turnserver.conf อัพเดทแล้ว"
+echo ""
+echo "อัพเดท livekit.yaml:"
+sed -i "s/^  .*: .*# livekit-api-key-secret/  ${LIVEKIT_API_KEY}: ${LIVEKIT_API_SECRET}/" config/livekit.yaml 2>/dev/null
+# Replace keys section entirely
+sed -i "/^keys:/,/^[a-z]/{/^keys:/!{/^[a-z]/!d}}" config/livekit.yaml 2>/dev/null
+sed -i "s/^keys:/keys:\n  ${LIVEKIT_API_KEY}: ${LIVEKIT_API_SECRET}/" config/livekit.yaml 2>/dev/null
+echo "  livekit.yaml อัพเดทแล้ว"
 echo ""
 echo "พร้อม deploy:"
 echo "  docker compose -f docker-compose.prod.yml up -d"

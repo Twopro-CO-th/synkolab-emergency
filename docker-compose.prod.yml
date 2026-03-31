@@ -1,8 +1,8 @@
 # ============================================================
-# synkolab-emergency — Production
+# synkolab-emergency — Production (Full Stack)
 # ============================================================
 # Usage:
-#   1. วาง SSL cert ใน ./certs/fullchain.pem, ./certs/privkey.pem (Sectigo Wildcard *.stu-link.com)
+#   1. วาง SSL cert ใน ./certs/fullchain.pem, ./certs/privkey.pem
 #   2. bash scripts/generate-env.sh (หรือ cp .env.example .env && แก้ค่า)
 #   3. docker compose -f docker-compose.prod.yml up -d
 #   4. เพิ่ม server block ใน host Nginx (ดู nginx/call.stu-link.com.conf)
@@ -22,6 +22,10 @@ services:
       - SSL_ENABLED=true
       - SSL_CERT_PATH=/app/certs/fullchain.pem
       - SSL_KEY_PATH=/app/certs/privkey.pem
+      - REDIS_ENABLED=true
+      - REDIS_URL=redis://redis:6379
+      - LIVEKIT_ENABLED=true
+      - LIVEKIT_URL=ws://livekit:7880
     volumes:
       - app-data:/app/data
       - ./certs/fullchain.pem:/app/certs/fullchain.pem:ro
@@ -33,6 +37,46 @@ services:
       interval: 30s
       timeout: 5s
       retries: 3
+    depends_on:
+      redis:
+        condition: service_healthy
+      livekit:
+        condition: service_started
+    networks:
+      - emergency-net
+
+  # --- Redis ---
+  redis:
+    image: redis:7-alpine
+    container_name: emergency-redis
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+    volumes:
+      - redis-data:/data
+    networks:
+      - emergency-net
+
+  # --- LiveKit SFU ---
+  livekit:
+    image: livekit/livekit-server:latest
+    container_name: emergency-livekit
+    restart: unless-stopped
+    ports:
+      - "7880:7880"
+      - "7881:7881"
+      - "50000-50060:50000-50060/udp"
+    volumes:
+      - ./config/livekit.yaml:/etc/livekit.yaml:ro
+    command: ["--config", "/etc/livekit.yaml"]
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - emergency-net
 
   # --- TURN Server ---
   coturn:
@@ -49,3 +93,9 @@ services:
 volumes:
   app-data:
     driver: local
+  redis-data:
+    driver: local
+
+networks:
+  emergency-net:
+    driver: bridge

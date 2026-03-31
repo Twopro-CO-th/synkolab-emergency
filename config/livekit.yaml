@@ -8,15 +8,14 @@ rtc:
   tcp_port: 7881
   port_range_start: 50000
   port_range_end: 50060
-  use_external_ip: false
-  node_ip: 127.0.0.1
-  enable_loopback_candidate: true
+  use_external_ip: true
+  enable_loopback_candidate: false
 
 redis:
   address: redis:6379
 
 keys:
-  devkey: secret123456789abcdef123456789abcdef
+  APId76e4b049bcba8e2: 69191190270a64bac6ff9fff06139b9da5666546c3a7082a3d5bcd2b4a8f8d55
 
 logging:
   level: info
@@ -26,8 +25,4 @@ room:
   max_participants: 50
 
 turn:
-  enabled: true
-  udp_port: 3478
-  tls_port: 0
-  relay_range_start: 50100
-  relay_range_end: 50160
+  enabled: false
