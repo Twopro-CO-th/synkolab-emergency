@@ -1,0 +1,96 @@
+# ============================================================
+# synkolab-emergency — Development
+# ============================================================
+# Usage:
+#   cp .env.example .env    # แก้ค่าตามต้องการ
+#   docker compose up -d
+#
+# เปิด LiveKit (optional):
+#   docker compose --profile livekit up -d
+# ============================================================
+
+services:
+  # --- Emergency API ---
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: emergency-api
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      - DB_PATH=/app/data/emergency.db
+      - SSL_ENABLED=false
+    volumes:
+      - app-data:/app/data
+    ports:
+      - "4000:4000"
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1:4000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    networks:
+      - emergency-net
+
+  # --- TURN Server (production only — ใน dev ใช้ LiveKit built-in TURN) ---
+  coturn:
+    image: coturn/coturn:latest
+    container_name: emergency-coturn
+    restart: unless-stopped
+    network_mode: host
+    volumes:
+      - ./config/turnserver.conf:/etc/turnserver.conf:ro
+    command: ["-c", "/etc/turnserver.conf"]
+    profiles:
+      - production
+
+  # --- LiveKit SFU (optional, for group/broadcast calls) ---
+  livekit:
+    image: livekit/livekit-server:latest
+    container_name: emergency-livekit
+    restart: unless-stopped
+    ports:
+      - "7880:7880"     # WebSocket (client connects here)
+      - "7881:7881"     # TCP for WebRTC
+      - "3478:3478/udp"   # LiveKit built-in TURN (UDP)
+      - "3478:3478/tcp"   # LiveKit built-in TURN (TCP)
+      - "50000-50060:50000-50060/udp"   # UDP media ports
+      - "50100-50160:50100-50160/udp"   # TURN relay ports
+    volumes:
+      - ./config/livekit.yaml:/etc/livekit.yaml:ro
+    command: ["--config", "/etc/livekit.yaml"]
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - emergency-net
+    profiles:
+      - livekit
+
+  # --- Redis (required by LiveKit) ---
+  redis:
+    image: redis:7-alpine
+    container_name: emergency-redis
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+    volumes:
+      - redis-data:/data
+    networks:
+      - emergency-net
+    profiles:
+      - livekit
+
+volumes:
+  app-data:
+    driver: local
+  redis-data:
+    driver: local
+
+networks:
+  emergency-net:
+    driver: bridge

@@ -1,0 +1,12 @@
+node_modules/
+src/
+test/
+test-client/
+.env
+.env.example
+.git
+.gitignore
+certs/
+data/
+*.md
+tsconfig.json
