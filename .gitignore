@@ -12,3 +12,4 @@ certs/*.crt
 test-client/node_modules/
 test-client/dist/
 certs/*.csr
+certs/*.txt
