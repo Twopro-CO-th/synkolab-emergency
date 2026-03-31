@@ -1,13 +1,11 @@
 # ============================================================
-# synkolab-emergency — Production with SSL (Nginx)
+# synkolab-emergency — Production
 # ============================================================
 # Usage:
 #   1. วาง SSL cert ใน ./certs/fullchain.pem, ./certs/privkey.pem (Sectigo Wildcard *.stu-link.com)
-#   2. cp .env.example .env && แก้ค่า production
+#   2. bash scripts/generate-env.sh (หรือ cp .env.example .env && แก้ค่า)
 #   3. docker compose -f docker-compose.prod.yml up -d
-#
-# หรือใช้ Let's Encrypt:
-#   docker compose -f docker-compose.prod.yml run --rm certbot
+#   4. เพิ่ม server block ใน host Nginx (ดู nginx/call.stu-link.com.conf)
 # ============================================================
 
 services:
@@ -28,52 +26,13 @@ services:
       - app-data:/app/data
       - ./certs/fullchain.pem:/app/certs/fullchain.pem:ro
       - ./certs/privkey.pem:/app/certs/privkey.pem:ro
-    expose:
-      - "4000"
+    ports:
+      - "127.0.0.1:4000:4000"
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "--no-check-certificate", "https://127.0.0.1:4000/health"]
       interval: 30s
       timeout: 5s
       retries: 3
-    networks:
-      - emergency-net
-
-  # --- Nginx (SSL Termination + Reverse Proxy) ---
-  nginx:
-    image: nginx:alpine
-    container_name: emergency-nginx
-    restart: unless-stopped
-    ports:
-      - "8880:80"
-      - "8443:443"
-    volumes:
-      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
-      - ./certs:/etc/nginx/certs:ro
-      - certbot-www:/var/www/certbot:ro
-    depends_on:
-      app:
-        condition: service_healthy
-    networks:
-      - emergency-net
-
-  # --- Let's Encrypt Certbot (optional) ---
-  certbot:
-    image: certbot/certbot
-    container_name: emergency-certbot
-    volumes:
-      - ./certs:/etc/letsencrypt:rw
-      - certbot-www:/var/www/certbot:rw
-    entrypoint: /bin/sh -c
-    command: >
-      "certbot certonly --webroot
-       --webroot-path=/var/www/certbot
-       --email admin@cmru.ac.th
-       --agree-tos --no-eff-email
-       -d call.stu-link.com
-       && cp /etc/letsencrypt/live/call.stu-link.com/fullchain.pem /etc/letsencrypt/fullchain.pem
-       && cp /etc/letsencrypt/live/call.stu-link.com/privkey.pem /etc/letsencrypt/privkey.pem"
-    profiles:
-      - certbot
 
   # --- TURN Server ---
   coturn:
@@ -90,9 +49,3 @@ services:
 volumes:
   app-data:
     driver: local
-  certbot-www:
-    driver: local
-
-networks:
-  emergency-net:
-    driver: bridge
