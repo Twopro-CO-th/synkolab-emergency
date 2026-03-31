@@ -1,26 +1,21 @@
 /**
  * 1-to-1 Call Test — ทดสอบ Full Flow การโทรระหว่าง 2 คน
  *
- * Step 1: ทั้งสองฝ่ายเชื่อมต่อ WebSocket
- * Step 2: Caller โทรหา Callee ผ่าน API
- * Step 3: Callee รับสาย incoming_call ผ่าน WebSocket
- * Step 4: Callee accept call ผ่าน API
- * Step 5: Caller ได้รับ call_accepted ผ่าน WebSocket
- * Step 6: ทั้งสองเข้า LiveKit room ด้วย token
- * Step 7: ทั้งสอง publish audio
- * Step 8: ทั้งสองรับ audio ของอีกฝ่ายได้
- * Step 9: Caller วางสาย → ทั้งสองได้รับ call_ended
- * Step 10: ตรวจ call history ว่าบันทึกถูกต้อง
+ * Usage: NODE_TLS_REJECT_UNAUTHORIZED=0 node test/call-1to1-test.mjs
+ * Env vars: API_URL, API_KEY, JWT_SECRET, LIVEKIT_URL
  */
 
+process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
+
+import 'dotenv/config';
 import { SignJWT } from 'jose';
 import WebSocket from 'ws';
 import { Room, RoomEvent, TrackSource, AudioSource, LocalAudioTrack, AudioFrame } from '@livekit/rtc-node';
 
-const API = 'http://localhost:4000';
-const LK_WS = 'ws://localhost:7880';
-const API_KEY = 'sk_live_change-me-to-random-string';
-const JWT_SECRET = 'change-me-to-64-char-random-string-use-openssl-rand-hex-32';
+const API = process.env.API_URL || process.env.PUBLIC_URL || 'https://call.stu-link.com';
+const LK_WS = process.env.LIVEKIT_URL || process.env.LIVEKIT_PUBLIC_URL || 'wss://call.stu-link.com:7880';
+const API_KEY = process.env.API_KEY || (process.env.API_KEYS || '').split(',')[0] || 'sk_live_change-me-to-random-string';
+const JWT_SECRET = process.env.JWT_SECRET || 'change-me-to-64-char-random-string-use-openssl-rand-hex-32';
 
 let passed = 0;
 let failed = 0;
@@ -47,7 +42,8 @@ async function getJwt(userId, name) {
 
 function connectWs(token) {
   return new Promise((resolve, reject) => {
-    const ws = new WebSocket('ws://localhost:4000/ws');
+    const wsUrl = API.replace(/^http/, 'ws') + '/ws';
+    const ws = new WebSocket(wsUrl, { rejectUnauthorized: false });
     ws.on('open', () => {
       ws.send(JSON.stringify({ type: 'auth', token }));
     });

@@ -2,19 +2,24 @@
  * WebSocket Integration Test
  * ทดสอบ: Auth, Signaling, Call Flow, Rate Limit, Error Handling
  *
- * Usage: node test/ws-test.mjs
+ * Usage: NODE_TLS_REJECT_UNAUTHORIZED=0 node test/ws-test.mjs
+ * Env vars: API_URL, JWT_SECRET, DEVICE_SECRET, API_KEY
  */
 
+process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
+
+import 'dotenv/config';
 import { SignJWT } from 'jose';
 import WebSocket from 'ws';
 import { createHmac } from 'crypto';
 
 // ---- Config ----
-const API_URL = 'http://localhost:4000';
-const WS_URL = 'ws://localhost:4000/ws';
+const BASE_URL = process.env.API_URL || process.env.PUBLIC_URL || 'https://call.stu-link.com';
+const API_URL = BASE_URL;
+const WS_URL = BASE_URL.replace(/^http/, 'ws') + '/ws';
 const JWT_SECRET = process.env.JWT_SECRET || 'change-me-to-64-char-random-string-use-openssl-rand-hex-32';
 const DEVICE_SECRET = process.env.DEVICE_SECRET || 'change-me-device-secret-use-openssl-rand-hex-32';
-const API_KEY = process.env.API_KEY || 'sk_live_change-me-to-random-string';
+const API_KEY = process.env.API_KEY || (process.env.API_KEYS || '').split(',')[0] || 'sk_live_change-me-to-random-string';
 
 let passed = 0;
 let failed = 0;
@@ -53,7 +58,7 @@ function makeDeviceToken(deviceId) {
 // ---- Helper: Connect WS and return Promise ----
 function connectWs() {
   return new Promise((resolve, reject) => {
-    const ws = new WebSocket(WS_URL);
+    const ws = new WebSocket(WS_URL, { rejectUnauthorized: false });
     ws.on('open', () => resolve(ws));
     ws.on('error', reject);
     setTimeout(() => reject(new Error('WS connect timeout')), 5000);

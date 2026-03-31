@@ -1,27 +1,23 @@
 /**
  * LiveKit Integration Test — ทดสอบทีละ step หาจุดที่พัง
  *
- * Step 1: API Health
- * Step 2: LiveKit Config endpoint
- * Step 3: Generate LiveKit Token
- * Step 4: LiveKit HTTP reachable
- * Step 5: LiveKit WebSocket handshake
- * Step 6: LiveKit Room connect (rtc-node)
- * Step 7: Publish audio track
- * Step 8: Second participant joins + receives audio
- * Step 9: Full call flow (API initiate → token → join)
+ * Usage: NODE_TLS_REJECT_UNAUTHORIZED=0 node test/livekit-test.mjs
+ * Env vars: API_URL, API_KEY, LIVEKIT_URL, LIVEKIT_API_KEY, LIVEKIT_API_SECRET
  */
 
+process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
+
+import 'dotenv/config';
 import { AccessToken, RoomServiceClient } from 'livekit-server-sdk';
 import { Room, RoomEvent, TrackSource } from '@livekit/rtc-node';
 import WebSocket from 'ws';
 
-const API = 'http://localhost:4000';
-const LK_WS = 'ws://localhost:7880';
-const LK_HTTP = 'http://localhost:7880';
-const API_KEY = 'sk_live_change-me-to-random-string';
-const LK_API_KEY = 'devkey';
-const LK_API_SECRET = 'secret123456789abcdef123456789abcdef';
+const API = process.env.API_URL || process.env.PUBLIC_URL || 'https://call.stu-link.com';
+const LK_WS = process.env.LIVEKIT_URL || process.env.LIVEKIT_PUBLIC_URL || 'wss://call.stu-link.com:7880';
+const LK_HTTP = LK_WS.replace(/^wss/, 'https').replace(/^ws/, 'http');
+const API_KEY = process.env.API_KEY || (process.env.API_KEYS || '').split(',')[0] || 'sk_live_change-me-to-random-string';
+const LK_API_KEY = process.env.LIVEKIT_API_KEY || 'devkey';
+const LK_API_SECRET = process.env.LIVEKIT_API_SECRET || 'secret123456789abcdef123456789abcdef';
 
 let passed = 0;
 let failed = 0;
