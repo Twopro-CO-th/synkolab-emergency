@@ -4,6 +4,7 @@ import { verifyJwt } from '../auth/jwt.js';
 import { verifyDeviceToken } from '../auth/device.js';
 import { getRoom } from './rooms.js';
 import { config } from '../config.js';
+import { registerAgent, unregisterAgent, getAgentProjectIds } from './escalation.js';
 import type { WsClientMessage, AuthContext } from '../types/index.js';
 
 export async function wsHandler(app: FastifyInstance): Promise<void> {
@@ -102,6 +103,14 @@ export async function wsHandler(app: FastifyInstance): Promise<void> {
           socket.send(JSON.stringify({ type: 'pong' }));
           break;
 
+        // --- Agent registration (intercom) ---
+        case 'register_agent': {
+          const projectIds = (msg as any).projectIds || [];
+          registerAgent(auth.id, projectIds);
+          socket.send(JSON.stringify({ type: 'agent_registered', projectIds }));
+          break;
+        }
+
         default:
           socket.send(JSON.stringify({ type: 'error', message: `unknown type: ${(msg as any).type}` }));
       }
@@ -112,6 +121,7 @@ export async function wsHandler(app: FastifyInstance): Promise<void> {
       clearInterval(messageResetTimer);
       if (auth) {
         getRoom().removeClient(auth.id);
+        unregisterAgent(auth.id);
         app.log.info({ clientId: auth.id }, 'ws disconnected');
       }
     });

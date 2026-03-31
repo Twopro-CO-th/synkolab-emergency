@@ -5,6 +5,7 @@ import { authenticate } from '../auth/middleware.js';
 import { getRoom } from '../ws/rooms.js';
 import { config } from '../config.js';
 import { createToken } from '../services/livekit.js';
+import { startEscalation, cancelEscalation, setAgentBusy, freeAgent, broadcastToProjectAgents } from '../ws/escalation.js';
 import type { CallType } from '../types/index.js';
 
 export async function callRoutes(app: FastifyInstance): Promise<void> {
@@ -82,6 +83,30 @@ export async function callRoutes(app: FastifyInstance): Promise<void> {
 
       // Return how many were notified
       Object.assign(request, { _broadcastNotified: notified });
+    } else if (type === 'intercom') {
+      // Intercom call — Pi device → project agents with escalation
+      const { projectId } = request.body as any;
+      if (projectId) {
+        // Broadcast to all project agents first
+        broadcastToProjectAgents(projectId, {
+          type: 'incoming_call',
+          callId,
+          callerId: request.auth.id,
+          callerName,
+          callType: 'intercom',
+          roomName,
+          projectId,
+          timeout: 60,
+        });
+
+        // Start escalation (ring agents one by one)
+        startEscalation(callId, projectId, roomName, callerName, 30, () => {
+          // All agents missed
+          db.prepare(`UPDATE calls SET status = 'missed', ended_at = datetime('now') WHERE id = ?`).run(callId);
+          room.sendTo(request.auth.id, { type: 'call_missed', callId });
+          broadcastToProjectAgents(projectId, { type: 'call_missed', callId });
+        });
+      }
     } else if (calleeId) {
       // Send to specific user/device
       room.sendTo(calleeId, {
@@ -135,6 +160,9 @@ export async function callRoutes(app: FastifyInstance): Promise<void> {
     const room = getRoom();
 
     if (action === 'accept') {
+      // Cancel escalation if intercom call
+      cancelEscalation(callId);
+
       db.prepare(`
         UPDATE calls SET status = 'active', callee_id = ?, callee_type = 'user', answered_at = datetime('now')
         WHERE id = ?
@@ -145,6 +173,11 @@ export async function callRoutes(app: FastifyInstance): Promise<void> {
         INSERT INTO call_participants (call_id, user_id, user_type)
         VALUES (?, ?, ?)
       `).run(callId, request.auth.id, 'user');
+
+      // Mark agent as busy for intercom calls
+      if (call.type === 'intercom') {
+        setAgentBusy(request.auth.id, callId);
+      }
 
       room.sendTo(call.caller_id, {
         type: 'call_accepted',
@@ -192,10 +225,18 @@ export async function callRoutes(app: FastifyInstance): Promise<void> {
     const call = db.prepare('SELECT * FROM calls WHERE id = ?').get(callId) as any;
     if (!call) return { ok: false, error: 'Call not found' };
 
+    // Cancel escalation if still running
+    cancelEscalation(callId);
+
     const answeredAt = call.answered_at ? new Date(call.answered_at).getTime() : null;
     const duration = answeredAt ? Math.floor((Date.now() - answeredAt) / 1000) : null;
 
     const newStatus = call.status === 'ringing' ? 'missed' : 'completed';
+
+    // Free agents involved in this call
+    if (call.type === 'intercom' && call.callee_id) {
+      freeAgent(call.callee_id);
+    }
 
     db.prepare(`
       UPDATE calls SET status = ?, ended_at = datetime('now'), duration = ?

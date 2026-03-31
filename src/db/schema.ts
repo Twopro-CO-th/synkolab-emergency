@@ -14,7 +14,7 @@ export function createTables(db: Database.Database): void {
       callee_id     TEXT,
       callee_type   TEXT CHECK(callee_type IN ('user','device')),
       room_name     TEXT NOT NULL,
-      type          TEXT NOT NULL CHECK(type IN ('normal','emergency','broadcast')),
+      type          TEXT NOT NULL CHECK(type IN ('normal','emergency','broadcast','intercom')),
       status        TEXT NOT NULL DEFAULT 'ringing' CHECK(status IN ('ringing','active','completed','missed','rejected')),
       started_at    TEXT NOT NULL DEFAULT (datetime('now')),
       answered_at   TEXT,
@@ -56,5 +56,43 @@ export function createTables(db: Database.Database): void {
     );
 
     CREATE INDEX IF NOT EXISTS idx_participants_call ON call_participants(call_id);
+
+    -- Projects (intercom multi-tenant)
+    CREATE TABLE IF NOT EXISTS projects (
+      id            TEXT PRIMARY KEY,
+      name          TEXT NOT NULL,
+      slug          TEXT NOT NULL UNIQUE,
+      owner_id      TEXT NOT NULL,
+      settings      TEXT DEFAULT '{}',
+      created_at    TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at    TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_projects_slug ON projects(slug);
+
+    -- Project members
+    CREATE TABLE IF NOT EXISTS project_members (
+      id            INTEGER PRIMARY KEY AUTOINCREMENT,
+      project_id    TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+      user_id       TEXT NOT NULL,
+      role          TEXT NOT NULL DEFAULT 'member' CHECK(role IN ('admin','member')),
+      created_at    TEXT NOT NULL DEFAULT (datetime('now')),
+      UNIQUE(project_id, user_id)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_pm_project ON project_members(project_id);
+    CREATE INDEX IF NOT EXISTS idx_pm_user    ON project_members(user_id);
+
+    -- Project devices (link device to project)
+    CREATE TABLE IF NOT EXISTS project_devices (
+      id            INTEGER PRIMARY KEY AUTOINCREMENT,
+      project_id    TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+      device_id     TEXT NOT NULL REFERENCES devices(id) ON DELETE CASCADE,
+      created_at    TEXT NOT NULL DEFAULT (datetime('now')),
+      UNIQUE(project_id, device_id)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_pd_project ON project_devices(project_id);
+    CREATE INDEX IF NOT EXISTS idx_pd_device  ON project_devices(device_id);
   `);
 }

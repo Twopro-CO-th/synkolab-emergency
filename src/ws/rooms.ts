@@ -55,14 +55,14 @@ class SignalingRoom {
     this.clients.delete(id);
   }
 
-  sendTo(targetId: string, message: WsServerMessage): boolean {
+  sendTo(targetId: string, message: WsServerMessage | Record<string, unknown>): boolean {
     const client = this.clients.get(targetId);
     if (!client || client.ws.readyState !== 1) return false;
     client.ws.send(JSON.stringify(message));
     return true;
   }
 
-  sendToMany(targetIds: string[], message: WsServerMessage): number {
+  sendToMany(targetIds: string[], message: WsServerMessage | Record<string, unknown>): number {
     const data = JSON.stringify(message);
     let sent = 0;
     for (const id of targetIds) {

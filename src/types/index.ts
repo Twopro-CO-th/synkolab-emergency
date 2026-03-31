@@ -22,7 +22,7 @@ export interface AuthContext {
 }
 
 // ---- Calls ----
-export type CallType = 'normal' | 'emergency' | 'broadcast';
+export type CallType = 'normal' | 'emergency' | 'broadcast' | 'intercom';
 export type CallStatus = 'ringing' | 'active' | 'completed' | 'missed' | 'rejected';
 
 export interface CallRecord {
@@ -68,16 +68,20 @@ export type WsClientMessage =
   | { type: 'call_accept'; callId: string }
   | { type: 'call_reject'; callId: string }
   | { type: 'call_end'; callId: string }
+  | { type: 'register_agent'; projectIds: string[] }
   | { type: 'heartbeat' }
   | { type: 'ping' };
 
 export type WsServerMessage =
   | { type: 'auth_ok'; id: string }
   | { type: 'auth_error'; reason: string }
-  | { type: 'incoming_call'; callId: string; callerId: string; callerName: string; callType: CallType; roomName: string }
+  | { type: 'incoming_call'; callId: string; callerId: string; callerName: string; callType: CallType; roomName: string; [key: string]: unknown }
   | { type: 'call_accepted'; callId: string; answererId: string }
   | { type: 'call_rejected'; callId: string }
   | { type: 'call_ended'; callId: string; reason: string }
+  | { type: 'call_missed'; callId: string }
+  | { type: 'call_timeout'; callId: string }
+  | { type: 'agent_registered'; projectIds: string[] }
   | { type: 'offer'; fromId: string; sdp: string }
   | { type: 'answer'; fromId: string; sdp: string }
   | { type: 'ice-candidate'; fromId: string; candidate: string }

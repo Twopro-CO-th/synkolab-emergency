@@ -14,6 +14,7 @@ import { callRoutes } from './routes/calls.js';
 import { deviceRoutes } from './routes/devices.js';
 import { turnRoutes } from './routes/turn.js';
 import { livekitRoutes } from './routes/livekit.js';
+import { projectRoutes } from './routes/projects.js';
 import { wsHandler } from './ws/handler.js';
 
 // Build SSL options if enabled
@@ -73,6 +74,7 @@ await app.register(callRoutes);
 await app.register(deviceRoutes);
 await app.register(turnRoutes);
 await app.register(livekitRoutes);
+await app.register(projectRoutes);
 await app.register(wsHandler);
 
 // --- Graceful shutdown ---
