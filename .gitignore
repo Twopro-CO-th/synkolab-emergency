@@ -11,3 +11,4 @@ certs/*.crt
 # Test client (แยก repo หรือ dev only)
 test-client/node_modules/
 test-client/dist/
+certs/*.csr
