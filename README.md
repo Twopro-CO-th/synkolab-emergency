@@ -38,11 +38,59 @@ npm run dev    # development (auto-reload)
 npm start      # production
 ```
 
-## Production (SSL — Docker)
+## Production Deploy
 
 Domain: `call.stu-link.com` (Sectigo Wildcard `*.stu-link.com`)
 
-### 1. วาง SSL Certificate
+### Architecture
+
+```
+Client (HTTPS/WSS)
+  │
+  ▼
+Host Nginx (port 443 SSL)
+  ├── /ws      → emergency-api (127.0.0.1:4000 HTTPS)
+  ├── /rtc     → livekit (127.0.0.1:7880 WS)
+  ├── /health  → emergency-api
+  └── /*       → emergency-api
+  
+TURN/TURNS (coturn)
+  ├── port 3478 (TURN)
+  └── port 5349 (TURNS/TLS)
+```
+
+### Services ทั้งหมด
+
+| Service | Container | Port | รายละเอียด |
+|---------|-----------|------|------------|
+| **emergency-api** | Node.js + Fastify | 127.0.0.1:4000 | API + WebSocket signaling (SSL) |
+| **emergency-redis** | Redis 7 | internal | Session/state management |
+| **emergency-livekit** | LiveKit SFU | 7880, 7881, 50000-50060/udp | Group/broadcast calls |
+| **emergency-coturn** | coturn | 3478, 5349 | TURN/TURNS relay |
+| **Host Nginx** | nginx (existing) | 80, 443 | SSL termination + reverse proxy |
+
+### SSL End-to-End
+
+| จุด | Protocol |
+|-----|----------|
+| Client → Nginx | HTTPS (443) |
+| Nginx → App | HTTPS (4000) |
+| Client → TURN | TURNS/TLS (5349) |
+| Client → LiveKit | WSS ผ่าน Nginx (`/rtc`) |
+| ภายใน Docker | ไม่เข้ารหัส (internal network) |
+
+### Step-by-Step Deploy
+
+#### 1. Clone & Build
+
+```bash
+git clone https://github.com/Twopro-CO-th/synkolab-emergency.git
+cd synkolab-emergency
+npm install
+npm run build
+```
+
+#### 2. วาง SSL Certificate
 
 วางไฟล์ 2 ตัวใน `certs/`:
 
@@ -52,47 +100,75 @@ certs/
   privkey.pem      ← private key
 ```
 
-### 2. สร้าง .env
+รวมถึงคัดลอกไปที่ host Nginx ใช้:
 
 ```bash
-# สร้างอัตโนมัติพร้อม generate secrets ทั้งหมด
+sudo cp certs/fullchain.pem /home/superadmin/ssl3/fullchain.pem
+sudo cp certs/privkey.pem /home/superadmin/ssl3/stu_link.com.key
+```
+
+#### 3. สร้าง .env
+
+```bash
 bash scripts/generate-env.sh
 ```
 
-Script จะสร้าง JWT_SECRET, API_KEYS, DEVICE_SECRET, TURN_SECRET และอัพเดท `turnserver.conf` ให้ตรงกัน
+Script จะสร้าง JWT_SECRET, API_KEYS, DEVICE_SECRET, TURN_SECRET, LiveKit keys และอัพเดท `turnserver.conf` + `livekit.yaml` ให้ตรงกัน
 
 > **สำคัญ:** เก็บค่า `API_KEYS` ที่ได้ไปใส่ใน community-link server ด้วย
 
-### 3. Start Services
+#### 4. ตั้งค่า Host Nginx
+
+```bash
+sudo cp nginx/call.stu-link.com.conf /etc/nginx/sites-enabled/
+sudo nginx -t
+sudo systemctl reload nginx
+```
+
+#### 5. เปิด Firewall
+
+```bash
+sudo ufw allow 3478/tcp
+sudo ufw allow 3478/udp
+sudo ufw allow 5349/tcp
+```
+
+> Port 80/443 ใช้ host Nginx ที่เปิดอยู่แล้ว
+
+#### 6. Start Services
 
 ```bash
 docker compose -f docker-compose.prod.yml up -d
 ```
 
-### Services ที่รัน
+#### อัพเดท .env แล้ว restart
 
-| Service | Port | รายละเอียด |
-|---------|------|------------|
-| **emergency-api** | 4000 (internal) | Node.js app (SSL enabled) |
-| **emergency-nginx** | 80, 443 | Reverse proxy + SSL |
-| **emergency-coturn** | 3478, 5349 (TLS) | TURN/TURNS server |
+เมื่อแก้ไข `.env` ให้ restart เฉพาะ app:
 
-### Firewall ports ที่ต้องเปิด
-
+```bash
+docker compose -f docker-compose.prod.yml up -d --force-recreate app
 ```
-80/tcp       — HTTP (redirect → HTTPS)
-443/tcp      — HTTPS
-3478/tcp+udp — TURN
-5349/tcp     — TURNS (TLS)
+
+หรือ restart ทั้งหมด:
+
+```bash
+docker compose -f docker-compose.prod.yml down
+docker compose -f docker-compose.prod.yml up -d
+```
+
+#### อัพเดท Nginx config แล้ว reload
+
+```bash
+sudo cp nginx/call.stu-link.com.conf /etc/nginx/sites-enabled/
+sudo nginx -t && sudo systemctl reload nginx
 ```
 
 ### Let's Encrypt (ทางเลือก)
 
-ถ้าไม่มี cert ของตัวเอง สามารถใช้ Let's Encrypt:
+ถ้าไม่มี cert ของตัวเอง:
 
 ```bash
-docker compose -f docker-compose.prod.yml --profile certbot run --rm certbot
-docker compose -f docker-compose.prod.yml up -d
+sudo certbot --nginx -d call.stu-link.com
 ```
 
 ## Test
