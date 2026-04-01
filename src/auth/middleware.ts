@@ -37,10 +37,12 @@ export async function authenticate(
     }
     // Service calls can specify which user they act on behalf of
     const userId = request.headers['x-request-user'] as string | undefined;
+    const userName = request.headers['x-request-user-name'] as string | undefined;
     request.auth = {
       type: 'service',
       id: userId || 'service',
       role: 'admin',
+      name: userName ? decodeURIComponent(userName) : undefined,
     };
     return;
   }

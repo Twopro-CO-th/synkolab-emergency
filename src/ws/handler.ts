@@ -10,6 +10,7 @@ import type { WsClientMessage, AuthContext } from '../types/index.js';
 export async function wsHandler(app: FastifyInstance): Promise<void> {
   app.get('/ws', { websocket: true }, (socket: WebSocket, request) => {
     let auth: AuthContext | null = null;
+    let connId: string = '';
     let messageCount = 0;
     let messageResetTimer: ReturnType<typeof setInterval>;
 
@@ -64,7 +65,7 @@ export async function wsHandler(app: FastifyInstance): Promise<void> {
           }
 
           clearTimeout(authTimer);
-          getRoom().addClient(auth.id, socket, auth.type as 'user' | 'device', auth.name, auth.role);
+          connId = getRoom().addClient(auth.id, socket, auth.type as 'user' | 'device', auth.name, auth.role);
           socket.send(JSON.stringify({ type: 'auth_ok', id: auth.id }));
           app.log.info({ clientId: auth.id, clientType: auth.type }, 'ws authenticated');
         } catch (err) {
@@ -99,7 +100,8 @@ export async function wsHandler(app: FastifyInstance): Promise<void> {
         // --- Heartbeat ---
         case 'heartbeat':
         case 'ping':
-          room.updatePing(auth.id);
+          if (connId) room.updatePing(connId);
+          room.updatePingByUserId(auth.id);
           socket.send(JSON.stringify({ type: 'pong' }));
           break;
 
@@ -119,8 +121,8 @@ export async function wsHandler(app: FastifyInstance): Promise<void> {
     socket.on('close', () => {
       clearTimeout(authTimer);
       clearInterval(messageResetTimer);
-      if (auth) {
-        getRoom().removeClient(auth.id);
+      if (auth && connId) {
+        getRoom().removeClient(connId);
         unregisterAgent(auth.id);
         app.log.info({ clientId: auth.id }, 'ws disconnected');
       }

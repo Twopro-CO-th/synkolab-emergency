@@ -4,7 +4,8 @@ import { config } from '../config.js';
 
 interface Client {
   ws: WebSocket;
-  id: string;
+  connId: string; // unique per connection
+  id: string;     // user/device id (can have multiple connections)
   type: 'user' | 'device';
   name?: string;
   role?: string;
@@ -12,8 +13,10 @@ interface Client {
   lastPing: number;
 }
 
+let connCounter = 0;
+
 class SignalingRoom {
-  private clients = new Map<string, Client>();
+  private clients = new Map<string, Client>(); // key = connId
   private pingTimer: ReturnType<typeof setInterval> | null = null;
 
   start(): void {
@@ -28,20 +31,17 @@ class SignalingRoom {
     this.clients.clear();
   }
 
-  addClient(id: string, ws: WebSocket, type: 'user' | 'device', name?: string, role?: string): void {
-    // Close existing connection for same id
-    const existing = this.clients.get(id);
-    if (existing) {
-      existing.ws.close(4000, 'replaced by new connection');
-    }
-
+  addClient(id: string, ws: WebSocket, type: 'user' | 'device', name?: string, role?: string): string {
     if (this.clients.size >= config.ws.maxConnections) {
       ws.close(4503, 'max connections reached');
-      return;
+      return '';
     }
 
-    this.clients.set(id, {
+    const connId = `${id}:${++connCounter}`;
+
+    this.clients.set(connId, {
       ws,
+      connId,
       id,
       type,
       name,
@@ -49,25 +49,42 @@ class SignalingRoom {
       connectedAt: Date.now(),
       lastPing: Date.now(),
     });
+
+    return connId;
   }
 
-  removeClient(id: string): void {
-    this.clients.delete(id);
+  removeClient(connId: string): void {
+    this.clients.delete(connId);
+  }
+
+  // Remove by connId OR by userId (backward compat)
+  removeByUserId(id: string): void {
+    for (const [connId, client] of this.clients) {
+      if (client.id === id) {
+        this.clients.delete(connId);
+      }
+    }
   }
 
   sendTo(targetId: string, message: WsServerMessage | Record<string, unknown>): boolean {
-    const client = this.clients.get(targetId);
-    if (!client || client.ws.readyState !== 1) return false;
-    client.ws.send(JSON.stringify(message));
-    return true;
+    const data = JSON.stringify(message);
+    let sent = false;
+    // Send to ALL connections for this user/device id
+    for (const client of this.clients.values()) {
+      if (client.id === targetId && client.ws.readyState === 1) {
+        client.ws.send(data);
+        sent = true;
+      }
+    }
+    return sent;
   }
 
   sendToMany(targetIds: string[], message: WsServerMessage | Record<string, unknown>): number {
+    const targetSet = new Set(targetIds);
     const data = JSON.stringify(message);
     let sent = 0;
-    for (const id of targetIds) {
-      const client = this.clients.get(id);
-      if (client && client.ws.readyState === 1) {
+    for (const client of this.clients.values()) {
+      if (targetSet.has(client.id) && client.ws.readyState === 1) {
         client.ws.send(data);
         sent++;
       }
@@ -86,15 +103,19 @@ class SignalingRoom {
   }
 
   isOnline(id: string): boolean {
-    const c = this.clients.get(id);
-    return !!c && c.ws.readyState === 1;
+    for (const client of this.clients.values()) {
+      if (client.id === id && client.ws.readyState === 1) return true;
+    }
+    return false;
   }
 
   getOnlineCounts(): { users: number; devices: number; total: number } {
+    const seen = new Set<string>();
     let users = 0;
     let devices = 0;
     for (const c of this.clients.values()) {
-      if (c.ws.readyState !== 1) continue;
+      if (c.ws.readyState !== 1 || seen.has(c.id)) continue;
+      seen.add(c.id);
       if (c.type === 'device') devices++;
       else users++;
     }
@@ -102,37 +123,50 @@ class SignalingRoom {
   }
 
   getOnlineIds(): string[] {
-    return Array.from(this.clients.entries())
-      .filter(([, c]) => c.ws.readyState === 1)
-      .map(([id]) => id);
+    const ids = new Set<string>();
+    for (const c of this.clients.values()) {
+      if (c.ws.readyState === 1) ids.add(c.id);
+    }
+    return Array.from(ids);
   }
 
   getOnlineClients(): Array<{ id: string; type: string; name?: string }> {
-    return Array.from(this.clients.values())
-      .filter(c => c.ws.readyState === 1)
-      .map(c => ({ id: c.id, type: c.type, name: c.name }));
+    const seen = new Set<string>();
+    const result: Array<{ id: string; type: string; name?: string }> = [];
+    for (const c of this.clients.values()) {
+      if (c.ws.readyState !== 1 || seen.has(c.id)) continue;
+      seen.add(c.id);
+      result.push({ id: c.id, type: c.type, name: c.name });
+    }
+    return result;
   }
 
   private pingAll(): void {
     const now = Date.now();
-    for (const [id, client] of this.clients) {
+    for (const [connId, client] of this.clients) {
       if (client.ws.readyState !== 1) {
-        this.clients.delete(id);
+        this.clients.delete(connId);
         continue;
       }
-      // Disconnect if no pong for 2 intervals
       if (now - client.lastPing > config.ws.pingInterval * 2.5) {
         client.ws.close(4408, 'ping timeout');
-        this.clients.delete(id);
+        this.clients.delete(connId);
         continue;
       }
       client.ws.ping();
     }
   }
 
-  updatePing(id: string): void {
-    const c = this.clients.get(id);
+  updatePing(connId: string): void {
+    const c = this.clients.get(connId);
     if (c) c.lastPing = Date.now();
+  }
+
+  // Also update by userId for backward compat
+  updatePingByUserId(id: string): void {
+    for (const c of this.clients.values()) {
+      if (c.id === id) c.lastPing = Date.now();
+    }
   }
 }
 
