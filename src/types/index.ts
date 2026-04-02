@@ -23,7 +23,7 @@ export interface AuthContext {
 
 // ---- Calls ----
 export type CallType = 'normal' | 'emergency' | 'broadcast' | 'intercom';
-export type CallStatus = 'ringing' | 'active' | 'completed' | 'missed' | 'rejected';
+export type CallStatus = 'ringing' | 'waiting' | 'active' | 'completed' | 'missed' | 'rejected';
 
 export interface CallRecord {
   id: string;
@@ -78,6 +78,7 @@ export type WsServerMessage =
   | { type: 'incoming_call'; callId: string; callerId: string; callerName: string; callType: CallType; roomName: string; [key: string]: unknown }
   | { type: 'call_accepted'; callId: string; answererId: string }
   | { type: 'call_rejected'; callId: string }
+  | { type: 'call_waiting'; callId: string; roomName: string; callerName: string; callType: CallType; callerId: string }
   | { type: 'call_ended'; callId: string; reason: string }
   | { type: 'call_missed'; callId: string }
   | { type: 'call_timeout'; callId: string }

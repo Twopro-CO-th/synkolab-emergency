@@ -15,7 +15,7 @@ export function createTables(db: Database.Database): void {
       callee_type   TEXT CHECK(callee_type IN ('user','device')),
       room_name     TEXT NOT NULL,
       type          TEXT NOT NULL CHECK(type IN ('normal','emergency','broadcast','intercom')),
-      status        TEXT NOT NULL DEFAULT 'ringing' CHECK(status IN ('ringing','active','completed','missed','rejected')),
+      status        TEXT NOT NULL DEFAULT 'ringing' CHECK(status IN ('ringing','waiting','active','completed','missed','rejected')),
       started_at    TEXT NOT NULL DEFAULT (datetime('now')),
       answered_at   TEXT,
       ended_at      TEXT,

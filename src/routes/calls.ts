@@ -117,6 +117,16 @@ export async function callRoutes(app: FastifyInstance): Promise<void> {
         callType: type,
         roomName,
       });
+
+      // Also broadcast to all agents so they can see waiting calls
+      room.broadcast({
+        type: 'call_waiting',
+        callId,
+        roomName,
+        callerName,
+        callType: type,
+        callerId: request.auth.id,
+      }, request.auth.id);
     }
 
     // Auto-generate LiveKit token for caller if LiveKit is enabled
@@ -179,11 +189,11 @@ export async function callRoutes(app: FastifyInstance): Promise<void> {
         setAgentBusy(request.auth.id, callId);
       }
 
-      room.sendTo(call.caller_id, {
+      room.broadcast({
         type: 'call_accepted',
         callId,
         answererId: request.auth.id,
-      });
+      }, request.auth.id);
 
       // Generate LiveKit token for callee
       let livekitToken: string | undefined;
@@ -249,18 +259,17 @@ export async function callRoutes(app: FastifyInstance): Promise<void> {
       WHERE call_id = ? AND left_at IS NULL
     `).run(callId);
 
-    // Notify all parties
+    // Notify all parties via broadcast
     const room = getRoom();
-    room.sendTo(call.caller_id, { type: 'call_ended', callId, reason: 'ended' });
-    if (call.callee_id) {
-      room.sendTo(call.callee_id, { type: 'call_ended', callId, reason: 'ended' });
-    }
-    // For emergency/broadcast, notify all
-    if (call.type !== 'normal') {
-      room.broadcast({ type: 'call_ended', callId, reason: 'ended' });
-    }
+    room.broadcast({ type: 'call_ended', callId, reason: 'ended' });
 
     return { ok: true, duration };
+  });
+
+  // Active/waiting calls (queue view)
+  app.get('/calls/active', { preHandler: authenticate }, async () => {
+    const calls = db.prepare("SELECT * FROM calls WHERE status IN ('ringing', 'waiting', 'active') ORDER BY created_at DESC").all();
+    return { calls };
   });
 
   // Call history
